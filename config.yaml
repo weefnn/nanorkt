@@ -1,0 +1,29 @@
+# RTK 基站配置文件
+
+# 串口配置
+serial:
+  port: /dev/cu.usbserial-027FFD38
+  baudrate: 115200
+
+# NTRIP Caster 配置
+ntrip:
+  host: caster.emlid.com
+  port: 2101
+  mountpoint: MP14282
+  username: MP14282
+  password: 735sfa
+
+# 重连配置
+reconnect:
+  max_retries: 5      # 最大重试次数
+  retry_delay: 5.0    # 重试延迟（秒）
+
+# 基站坐标配置 (新增)
+base_station:
+  latitude: 31.359491017   # 纬度 (度)
+  longitude: 120.714529933 # 经度 (度)
+  altitude: 51.6990        # 高程 (米)
+  # 是否启用 ARP 平均，通常基站设置为否，直接使用固定值
+  # 对于固定基站，建议将这个值设置为 False 或 0
+  # True 1, False 0
+  enable_arp_average: 0
