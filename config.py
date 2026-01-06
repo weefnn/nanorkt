@@ -95,4 +95,51 @@ class Config:
             'altitude': self.get('base_station.altitude', 0.0),
             'enable_arp_average': self.get('base_station.enable_arp_average', 0)
         }
+
+    def save(self, new_config: Dict[str, Any]) -> bool:
+        """
+        保存配置到文件 (包含类型转换)
+        """
+        try:
+            # 1. 更新内存中的配置
+            # 使用 deep update 策略防止覆盖整个 section
+            for section, values in new_config.items():
+                if section in self.data and isinstance(self.data[section], dict) and isinstance(values, dict):
+                    self.data[section].update(values)
+                else:
+                    self.data[section] = values
+            
+            # 2. 强制类型转换 (清洗数据)
+            # Serial
+            if 'serial' in self.data:
+                if 'baudrate' in self.data['serial']:
+                    self.data['serial']['baudrate'] = int(self.data['serial']['baudrate'])
+            # NTRIP
+            if 'ntrip' in self.data:
+                if 'port' in self.data['ntrip']:
+                    self.data['ntrip']['port'] = int(self.data['ntrip']['port'])
+            # Reconnect
+            if 'reconnect' in self.data:
+                if 'max_retries' in self.data['reconnect']:
+                    self.data['reconnect']['max_retries'] = int(self.data['reconnect']['max_retries'])
+                if 'retry_delay' in self.data['reconnect']:
+                    self.data['reconnect']['retry_delay'] = float(self.data['reconnect']['retry_delay'])
+            # Base Station
+            if 'base_station' in self.data:
+                for key in ['latitude', 'longitude', 'altitude']:
+                    if key in self.data['base_station']:
+                        self.data['base_station'][key] = float(self.data['base_station'][key])
+                if 'enable_arp_average' in self.data['base_station']:
+                    self.data['base_station']['enable_arp_average'] = int(self.data['base_station']['enable_arp_average'])
+            
+            # 3. 写入文件
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                # default_flow_style=False 保持 YAML 的块状格式，更易读
+                yaml.safe_dump(self.data, f, default_flow_style=False, allow_unicode=True)
+            
+            self.logger.info(f"配置文件保存成功: {self.config_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"保存配置文件错误: {e}")
+            return False
         
