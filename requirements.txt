@@ -1,9 +1,24 @@
+# NanoRTK 依赖项
+# RTK 基站 Web 管理软件
+
+# Web 框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Socket.IO
+python-socketio>=5.10.0
+
+# 串口通信
 pyserial>=3.5
-pyyaml>=6.0
-requests>=2.31.0
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-python-socketio>=5.11.0
-jinja2>=3.1.0
-aiofiles>=23.2.0
+
+# 系统监控
 psutil>=5.9.0
+
+# 配置管理
+pyyaml>=6.0
+pydantic>=2.5.0
+
+# 可选: 开发依赖
+# pytest>=7.0.0
+# black>=23.0.0
+# mypy>=1.0.0
