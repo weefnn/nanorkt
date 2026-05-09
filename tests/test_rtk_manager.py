@@ -1,9 +1,22 @@
 import threading
 import time
 import unittest
+import types
+import sys
+import importlib.util
+from pathlib import Path
 from unittest.mock import patch
 
-from app.web.services import rtk_manager
+# 避免测试依赖 FastAPI 等运行时环境：直接加载目标模块并注入假依赖
+_fake_station_module = types.ModuleType("app.core.station")
+_fake_station_module.RTKBaseStation = object
+sys.modules["app.core.station"] = _fake_station_module
+
+_module_path = Path(__file__).resolve().parents[1] / "app" / "web" / "services" / "rtk_manager.py"
+_module_spec = importlib.util.spec_from_file_location("rtk_manager_under_test", _module_path)
+rtk_manager = importlib.util.module_from_spec(_module_spec)
+assert _module_spec and _module_spec.loader
+_module_spec.loader.exec_module(rtk_manager)
 
 
 class BlockingFakeStation:
@@ -28,7 +41,7 @@ class BlockingFakeStation:
 
 
 class RTKManagerConcurrencyTest(unittest.TestCase):
-    @patch("app.web.services.rtk_manager.RTKBaseStation", BlockingFakeStation)
+    @patch.object(rtk_manager, "RTKBaseStation", BlockingFakeStation)
     def test_stop_timeout_does_not_allow_second_start(self):
         manager = rtk_manager.RTKManager()
         manager.STOP_TIMEOUT = 0.05
