@@ -186,7 +186,11 @@ async def control_service(request: Request) -> JSONResponse:
                     "message": "服务已在运行中"
                 })
             
-            manager.start_service()
+            if not manager.start_service():
+                return JSONResponse({
+                    "success": False,
+                    "message": "服务启动失败"
+                })
             return JSONResponse({
                 "success": True,
                 "message": "服务已启动"
@@ -199,7 +203,11 @@ async def control_service(request: Request) -> JSONResponse:
                     "message": "服务未在运行"
                 })
             
-            manager.stop_service()
+            if not manager.stop_service():
+                return JSONResponse({
+                    "success": False,
+                    "message": "服务停止超时，仍在关闭中"
+                })
             return JSONResponse({
                 "success": True,
                 "message": "服务已停止"
