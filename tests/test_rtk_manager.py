@@ -1,12 +1,28 @@
 import importlib.util
+import sys
 import threading
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 
 _MODULE_PATH = Path(__file__).resolve().parents[1] / "app" / "web" / "services" / "rtk_manager.py"
+_FAKE_STATION_MODULE = types.ModuleType("app.core.station")
+
+
+class _PlaceholderStation:
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+_FAKE_STATION_MODULE.RTKBaseStation = _PlaceholderStation
+sys.modules.setdefault("app.core.station", _FAKE_STATION_MODULE)
+
 _SPEC = importlib.util.spec_from_file_location("rtk_manager_under_test", _MODULE_PATH)
 if _SPEC is None or _SPEC.loader is None:
     raise RuntimeError("无法加载 rtk_manager 模块")
