@@ -40,9 +40,6 @@ from typing import Any, Dict, Optional
 import yaml  # type: ignore
 from pydantic import BaseModel, Field, field_validator
 
-from app.core.exceptions import ConfigurationError
-
-
 # ============================================================================
 # Pydantic 配置模型
 # ============================================================================
@@ -181,8 +178,6 @@ class Config:
         Returns:
             加载是否成功
         
-        Raises:
-            ConfigurationError: 配置文件格式错误
         """
         try:
             if not self.config_path.exists():
@@ -201,10 +196,14 @@ class Config:
             return True
             
         except yaml.YAMLError as e:
-            raise ConfigurationError(
-                f"YAML 格式错误: {e}",
-                config_file=str(self.config_path)
+            # 配置文件损坏时回退默认配置，避免服务整体不可用。
+            self.logger.error(
+                f"配置文件 YAML 格式错误: {e}，将使用默认配置",
+                exc_info=True
             )
+            self.data = {}
+            self.app_config = AppConfig()
+            return False
         except Exception as e:
             self.logger.error(f"加载配置文件错误: {e}")
             # 使用默认配置
