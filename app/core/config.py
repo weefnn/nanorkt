@@ -35,10 +35,10 @@ NanoRTK 配置管理模块
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 import yaml  # type: ignore
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.core.exceptions import ConfigurationError
 
@@ -195,10 +195,20 @@ class Config:
                 self.data = yaml.safe_load(f) or {}
             
             # 使用 Pydantic 验证配置
-            self.app_config = AppConfig(**self.data)
-            
-            self.logger.info(f"配置文件加载成功: {self.config_path}")
-            return True
+            try:
+                self.app_config = AppConfig(**self.data)
+                self.logger.info(f"配置文件加载成功: {self.config_path}")
+                return True
+            except ValidationError as e:
+                # 保留有效配置节，仅对非法节回退默认值，避免单个字段错误导致整份配置失效
+                self.logger.error(f"配置验证失败，将按节回退默认值: {e}")
+                self.app_config = AppConfig(
+                    serial=self._load_section("serial", SerialConfig),
+                    ntrip=self._load_section("ntrip", NTRIPConfig),
+                    reconnect=self._load_section("reconnect", ReconnectConfig),
+                    base_station=self._load_section("base_station", BaseStationConfig),
+                )
+                return False
             
         except yaml.YAMLError as e:
             raise ConfigurationError(
@@ -210,6 +220,24 @@ class Config:
             # 使用默认配置
             self.app_config = AppConfig()
             return False
+
+    def _load_section(self, section: str, model_class: Type[BaseModel]) -> BaseModel:
+        """
+        按配置节加载并验证
+        
+        当单个配置节验证失败时，仅该节回退为默认值。
+        """
+        raw_section = self.data.get(section, {})
+        
+        if not isinstance(raw_section, dict):
+            self.logger.warning(f"配置节 {section} 格式错误（应为对象），使用默认值")
+            return model_class()
+        
+        try:
+            return model_class(**raw_section)
+        except ValidationError as e:
+            self.logger.warning(f"配置节 {section} 验证失败，使用默认值: {e}")
+            return model_class()
     
     def get(self, key: str, default: Any = None) -> Any:
         """
