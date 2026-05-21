@@ -193,42 +193,45 @@ class RTKBaseStation:
         """
         self.logger.info("启动 RTK 基站服务...")
         
-        # 1. 设置串口
-        if not self.setup_serial():
-            self.logger.error("串口连接失败，退出")
-            return False
-        
-        # 2. 初始化接收机
-        if not self.initialize_receiver():
-            self.logger.warning("接收机初始化可能未完全成功，继续运行...")
-        
-        # 3. 设置 NTRIP 客户端
-        if not self.setup_ntrip():
-            self.logger.warning("NTRIP 初始连接失败，尝试重连...")
-            reconnect_config = self.config.get_reconnect_config()
-            
-            if not self.ntrip_server.reconnect(
-                max_retries=reconnect_config.max_retries,
-                retry_delay=reconnect_config.retry_delay
-            ):
-                self.logger.error("NTRIP 连接失败，退出")
-                self.serial_reader.disconnect()
-                return False
-        
-        self.is_running = True
-        self.logger.info("RTK 基站服务已启动")
-        
-        # 4. 开始读取串口数据
         try:
+            # 1. 设置串口
+            if not self.setup_serial():
+                self.logger.error("串口连接失败，退出")
+                return False
+            
+            # 2. 初始化接收机
+            if not self.initialize_receiver():
+                self.logger.warning("接收机初始化可能未完全成功，继续运行...")
+            
+            # 3. 设置 NTRIP 客户端
+            if not self.setup_ntrip():
+                self.logger.warning("NTRIP 初始连接失败，尝试重连...")
+                reconnect_config = self.config.get_reconnect_config()
+                
+                if not self.ntrip_server.reconnect(
+                    max_retries=reconnect_config.max_retries,
+                    retry_delay=reconnect_config.retry_delay
+                ):
+                    self.logger.error("NTRIP 连接失败，退出")
+                    return False
+            
+            self.is_running = True
+            self.logger.info("RTK 基站服务已启动")
+            
+            # 4. 开始读取串口数据
             self.serial_reader.read_data(self.on_serial_data)
+            return True
         except KeyboardInterrupt:
             self.logger.info("收到中断信号，正在停止...")
+            return True
         except NanoRTKError as e:
             self.logger.error(f"RTK 服务错误: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"RTK 服务异常: {e}")
+            return False
         finally:
             self.stop()
-        
-        return True
     
     def stop(self) -> None:
         """
