@@ -1,5 +1,21 @@
+import sys
+import types
 import unittest
 from unittest.mock import patch
+
+# 避免测试环境未安装 pyserial 时导入失败
+if "serial" not in sys.modules:
+    serial_stub = types.ModuleType("serial")
+
+    class SerialException(Exception):
+        pass
+
+    class Serial:
+        pass
+
+    serial_stub.SerialException = SerialException
+    serial_stub.Serial = Serial
+    sys.modules["serial"] = serial_stub
 
 from app.drivers.qianxun import QianxunInitializer
 
