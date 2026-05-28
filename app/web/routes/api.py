@@ -180,29 +180,17 @@ async def control_service(request: Request) -> JSONResponse:
         manager = get_manager()
         
         if action == "start":
-            if manager.is_running():
-                return JSONResponse({
-                    "success": False,
-                    "message": "服务已在运行中"
-                })
-            
-            manager.start_service()
+            started = manager.start_service()
             return JSONResponse({
-                "success": True,
-                "message": "服务已启动"
+                "success": started,
+                "message": "服务已启动" if started else "服务已在运行中"
             })
             
         elif action == "stop":
-            if not manager.is_running():
-                return JSONResponse({
-                    "success": False,
-                    "message": "服务未在运行"
-                })
-            
-            manager.stop_service()
+            stopped = manager.stop_service()
             return JSONResponse({
-                "success": True,
-                "message": "服务已停止"
+                "success": stopped,
+                "message": "服务已停止" if stopped else "服务停止超时或未在运行"
             })
             
         else:
