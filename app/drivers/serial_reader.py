@@ -25,6 +25,7 @@
 """
 
 import logging
+import threading
 import time
 from typing import Callable, Optional
 
@@ -80,6 +81,7 @@ class SerialReader:
         self.serial: Optional[serial.Serial] = None
         self.is_running = False
         self.logger = logging.getLogger(__name__)
+        self._serial_lock = threading.RLock()
     
     def __enter__(self) -> "SerialReader":
         """上下文管理器入口"""
@@ -103,15 +105,16 @@ class SerialReader:
             SerialConnectionError: 连接失败时抛出（如设备不存在或被占用）
         """
         try:
-            # 如果已连接，先断开
-            if self.serial and self.serial.is_open:
-                self.disconnect()
-            
-            self.serial = serial.Serial(
+            # 先断开旧连接，避免串口对象在多线程下被并发访问
+            self.disconnect()
+
+            serial_obj = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
                 timeout=self.timeout
             )
+            with self._serial_lock:
+                self.serial = serial_obj
             
             self.logger.info(f"串口连接成功: {self.port} @ {self.baudrate}")
             return True
@@ -135,14 +138,16 @@ class SerialReader:
         
         安全地关闭串口连接，释放系统资源。
         """
-        if self.serial and self.serial.is_open:
+        with self._serial_lock:
+            serial_obj = self.serial
+            self.serial = None
+
+        if serial_obj and serial_obj.is_open:
             try:
-                self.serial.close()
+                serial_obj.close()
                 self.logger.info(f"串口已断开: {self.port}")
             except Exception as e:
                 self.logger.warning(f"断开串口时发生错误: {e}")
-            finally:
-                self.serial = None
     
     def is_connected(self) -> bool:
         """
@@ -151,7 +156,9 @@ class SerialReader:
         Returns:
             True 如果串口已连接且打开
         """
-        return self.serial is not None and self.serial.is_open
+        with self._serial_lock:
+            serial_obj = self.serial
+        return serial_obj is not None and serial_obj.is_open
     
     def read_data(self, callback: Callable[[bytes], None]) -> None:
         """
@@ -178,8 +185,15 @@ class SerialReader:
         
         try:
             while self.is_running:
-                if self.serial.in_waiting > 0:
-                    data = self.serial.read(self.serial.in_waiting)
+                with self._serial_lock:
+                    serial_obj = self.serial
+
+                if not serial_obj or not serial_obj.is_open:
+                    break
+
+                waiting = serial_obj.in_waiting
+                if waiting > 0:
+                    data = serial_obj.read(waiting)
                     if data:
                         callback(data)
                 else:
@@ -187,6 +201,9 @@ class SerialReader:
                     time.sleep(self.READ_INTERVAL)
                     
         except serial.SerialException as e:
+            if not self.is_running:
+                self.logger.debug("串口读取已停止")
+                return
             self.logger.error(f"读取串口数据错误: {e}")
             self.is_running = False
             raise SerialConnectionError(
@@ -195,7 +212,8 @@ class SerialReader:
                 baudrate=self.baudrate
             )
         except Exception as e:
-            self.logger.error(f"读取串口数据异常: {e}")
+            if self.is_running:
+                self.logger.error(f"读取串口数据异常: {e}")
             self.is_running = False
         finally:
             self.is_running = False
@@ -214,9 +232,16 @@ class SerialReader:
             self.logger.error("串口未连接，无法写入数据")
             return False
         
+        with self._serial_lock:
+            serial_obj = self.serial
+
+        if not serial_obj or not serial_obj.is_open:
+            self.logger.error("串口未连接，无法写入数据")
+            return False
+        
         try:
-            self.serial.write(data)
-            self.serial.flush()
+            serial_obj.write(data)
+            serial_obj.flush()
             return True
         except Exception as e:
             self.logger.error(f"写入串口数据错误: {e}")
