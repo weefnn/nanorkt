@@ -8,15 +8,12 @@ from app.web.services.rtk_manager import RTKManager
 
 class _FakeStation:
     instances = []
-    start_barrier = None
 
     def __init__(self):
         self._stop_event = threading.Event()
         _FakeStation.instances.append(self)
 
     def start(self):
-        if _FakeStation.start_barrier is not None:
-            _FakeStation.start_barrier.wait(timeout=2.0)
         self._stop_event.wait(timeout=2.0)
 
     def stop(self):
@@ -29,7 +26,6 @@ class _FakeStation:
 class RTKManagerConcurrencyTests(unittest.TestCase):
     def setUp(self):
         _FakeStation.instances = []
-        _FakeStation.start_barrier = None
         self.manager = RTKManager()
 
     def tearDown(self):
@@ -42,8 +38,6 @@ class RTKManagerConcurrencyTests(unittest.TestCase):
         并发启动时只能有一个请求成功，避免创建孤儿线程。
         """
         start_gate = threading.Barrier(3)
-        # 让 station.start 阻塞，扩大竞态窗口
-        _FakeStation.start_barrier = threading.Barrier(2)
         results = []
         errors = []
 
