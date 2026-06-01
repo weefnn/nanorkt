@@ -219,26 +219,22 @@ class NTRIPServer:
         Returns:
             NTRIP SOURCE 请求字符串
         """
-        # 构建认证头
-        auth_header = ""
+        # 构建 SOURCE 请求头。
+        # 注意：必须只在末尾追加一个空行（CRLF CRLF），
+        # 否则后续头部会被 Caster 当作请求体，导致鉴权头失效。
+        headers = [
+            f"SOURCE {self.password} /{self.mountpoint}",
+            "Source-Agent: NanoRTK/2.0",
+            "User-Agent: NanoRTK/2.0",
+            "Accept: */*",
+        ]
+        
         if self.username and self.password:
             credentials = f"{self.username}:{self.password}"
             auth_b64 = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
-            auth_header = f"Authorization: Basic {auth_b64}\r\n"
+            headers.append(f"Authorization: Basic {auth_b64}")
         
-        # 构建 SOURCE 请求
-        # 注意：SOURCE 请求的密码直接在请求行中
-        request = (
-            f"SOURCE {self.password} /{self.mountpoint}\r\n"
-            f"Source-Agent: NanoRTK/2.0\r\n"
-            f"\r\n"
-            f"User-Agent: NanoRTK/2.0\r\n"
-            f"{auth_header}"
-            f"Accept: */*\r\n"
-            f"Connection: close\r\n"
-            f"\r\n"
-        )
-        return request
+        return "\r\n".join(headers) + "\r\n\r\n"
     
     def send_data(self, data: bytes) -> bool:
         """
