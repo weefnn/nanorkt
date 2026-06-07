@@ -10,6 +10,7 @@ API 路由模块
 所有 API 使用 /api 前缀。
 """
 
+import copy
 import logging
 from typing import Any, Dict, List
 
@@ -25,6 +26,35 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+PASSWORD_PLACEHOLDER = "__KEEP_EXISTING_PASSWORD__"
+
+
+def _mask_sensitive_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    对配置中的敏感字段进行脱敏。
+
+    当前仅处理 NTRIP 密码，避免通过 API 明文泄露。
+    """
+    masked = copy.deepcopy(config_data)
+    ntrip = masked.get("ntrip")
+
+    if isinstance(ntrip, dict) and ntrip.get("password"):
+        ntrip["password"] = PASSWORD_PLACEHOLDER
+
+    return masked
+
+
+def _strip_placeholder_password(config_data: Dict[str, Any]) -> None:
+    """
+    移除占位符密码，避免覆盖已有真实密码。
+    """
+    ntrip = config_data.get("ntrip")
+    if not isinstance(ntrip, dict):
+        return
+
+    password = ntrip.get("password")
+    if password in ("", PASSWORD_PLACEHOLDER, None):
+        ntrip.pop("password", None)
 
 
 # ============================================================================
@@ -110,7 +140,7 @@ async def get_config() -> Dict[str, Any]:
         完整的配置字典
     """
     config = Config()
-    return config.to_dict()
+    return _mask_sensitive_config(config.to_dict())
 
 
 @router.post("/config", summary="更新配置")
@@ -133,6 +163,7 @@ async def update_config(request: Request) -> JSONResponse:
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
+        _strip_placeholder_password(nested_data)
         
         config = Config()
         success = config.save(nested_data)
