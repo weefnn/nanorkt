@@ -227,11 +227,11 @@ class NTRIPServer:
             auth_header = f"Authorization: Basic {auth_b64}\r\n"
         
         # 构建 SOURCE 请求
-        # 注意：SOURCE 请求的密码直接在请求行中
+        # 注意：SOURCE 请求头只能在末尾使用一次 \r\n\r\n，
+        # 任何中间空行都会导致后续头（如 Authorization）失效。
         request = (
             f"SOURCE {self.password} /{self.mountpoint}\r\n"
             f"Source-Agent: NanoRTK/2.0\r\n"
-            f"\r\n"
             f"User-Agent: NanoRTK/2.0\r\n"
             f"{auth_header}"
             f"Accept: */*\r\n"
