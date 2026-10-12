@@ -276,18 +276,39 @@ function addLogEntry(log) {
     const container = document.getElementById('logTerminal');
     if (!container) return;
 
+    const level = normalizeLogLevel(log?.level);
+    const message = normalizeLogMessage(log?.message);
     const entry = document.createElement('div');
-    entry.className = `log-entry ${log.level.toLowerCase()}`;
+    entry.className = `log-entry ${level.toLowerCase()}`;
 
     // Format timestamp
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-
-    entry.innerHTML = `<strong>[${time}] [${log.level}]</strong> ${log.message}`;
+    const prefix = document.createElement('strong');
+    prefix.textContent = `[${time}] [${level}]`;
+    entry.appendChild(prefix);
+    entry.appendChild(document.createTextNode(` ${message}`));
     container.appendChild(entry);
 
     // Auto scroll if near bottom
     if (container.scrollHeight - container.scrollTop <= container.clientHeight + 100) {
         container.scrollTop = container.scrollHeight;
+    }
+}
+
+function normalizeLogLevel(level) {
+    const rawLevel = typeof level === 'string' ? level.toUpperCase() : 'INFO';
+    const allowed = new Set(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']);
+    return allowed.has(rawLevel) ? rawLevel : 'INFO';
+}
+
+function normalizeLogMessage(message) {
+    if (typeof message === 'string') return message;
+    if (message === null || message === undefined) return '';
+
+    try {
+        return JSON.stringify(message);
+    } catch {
+        return String(message);
     }
 }
 
