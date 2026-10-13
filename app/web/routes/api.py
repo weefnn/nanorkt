@@ -11,6 +11,7 @@ API 路由模块
 """
 
 import logging
+import os
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
@@ -25,6 +26,46 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+
+# 管理员令牌环境变量名
+ADMIN_TOKEN_ENV = "NANORTK_ADMIN_TOKEN"
+
+
+def _is_local_request(request: Request) -> bool:
+    """检查请求是否来自本机回环地址。"""
+    if not request.client or not request.client.host:
+        return False
+    return request.client.host in {"127.0.0.1", "::1", "localhost"}
+
+
+def _require_admin(request: Request) -> None:
+    """
+    校验管理员权限。
+
+    - 本地回环地址请求默认允许（便于设备本机运维）
+    - 远程请求必须提供有效管理员令牌
+    """
+    if _is_local_request(request):
+        return
+
+    expected_token = os.getenv(ADMIN_TOKEN_ENV, "").strip()
+    if not expected_token:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"远程管理已禁用，请在服务环境中设置 {ADMIN_TOKEN_ENV} "
+                "并在请求中携带管理员令牌"
+            ),
+        )
+
+    provided_token = (
+        request.headers.get("X-Admin-Token")
+        or request.query_params.get("token")
+        or ""
+    ).strip()
+
+    if provided_token != expected_token:
+        raise HTTPException(status_code=403, detail="管理员令牌无效")
 
 
 # ============================================================================
@@ -102,13 +143,15 @@ async def get_service_status() -> Dict[str, Any]:
 # ============================================================================
 
 @router.get("/config", summary="获取当前配置")
-async def get_config() -> Dict[str, Any]:
+async def get_config(request: Request) -> Dict[str, Any]:
     """
     获取当前配置文件内容
     
     Returns:
         完整的配置字典
     """
+    _require_admin(request)
+
     config = Config()
     return config.to_dict()
 
@@ -129,6 +172,8 @@ async def update_config(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        _require_admin(request)
+
         data = await request.json()
         
         # 将点号分隔的扁平键转换为嵌套结构
@@ -175,6 +220,8 @@ async def control_service(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        _require_admin(request)
+
         data = await request.json()
         action = data.get("action")
         manager = get_manager()
