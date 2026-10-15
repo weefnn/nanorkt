@@ -231,7 +231,6 @@ class NTRIPServer:
         request = (
             f"SOURCE {self.password} /{self.mountpoint}\r\n"
             f"Source-Agent: NanoRTK/2.0\r\n"
-            f"\r\n"
             f"User-Agent: NanoRTK/2.0\r\n"
             f"{auth_header}"
             f"Accept: */*\r\n"
