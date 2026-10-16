@@ -64,6 +64,7 @@ class RTKManager:
         self.station: Optional[RTKBaseStation] = None
         self.thread: Optional[threading.Thread] = None
         self._running = False
+        self._state_lock = threading.RLock()
         self.logger = logging.getLogger(__name__)
     
     def start_service(self) -> bool:
@@ -76,39 +77,58 @@ class RTKManager:
         Returns:
             启动是否成功发起（不代表服务已完全启动）
         """
-        if self._running:
-            self.logger.warning("服务已在运行中")
-            return False
-        
-        # 创建新的基站实例
-        self.station = RTKBaseStation()
-        
-        # 在独立线程中运行
-        self.thread = threading.Thread(
-            target=self._run_station,
-            name="RTKStationThread",
-            daemon=True
-        )
-        self.thread.start()
-        self._running = True
+        with self._state_lock:
+            if self._running:
+                self.logger.warning("服务已在运行中")
+                return False
+            if self.thread and self.thread.is_alive():
+                self.logger.warning("已有服务线程仍在退出中，暂时无法启动")
+                return False
+            
+            # 先置位，避免并发 start 竞态导致重复启动
+            self._running = True
+            
+            # 创建新的基站实例
+            station = RTKBaseStation()
+            self.station = station
+            
+            # 在独立线程中运行
+            self.thread = threading.Thread(
+                target=self._run_station,
+                args=(station,),
+                name="RTKStationThread",
+                daemon=True
+            )
+            
+            try:
+                self.thread.start()
+            except Exception:
+                self._running = False
+                self.station = None
+                self.thread = None
+                raise
         
         self.logger.info("RTK 服务启动请求已发送")
         return True
     
-    def _run_station(self) -> None:
+    def _run_station(self, station: RTKBaseStation) -> None:
         """
         在线程中运行 RTK 基站
         
         这是内部方法，不应直接调用。
         """
         try:
-            if self.station:
-                self.station.start()
+            station.start()
         except Exception as e:
             self.logger.error(f"RTK 服务运行异常: {e}")
         finally:
-            self._running = False
-            self.station = None
+            with self._state_lock:
+                if self.station is station:
+                    self.station = None
+                if self.thread is threading.current_thread():
+                    self.thread = None
+                if self.thread is None:
+                    self._running = False
     
     def stop_service(self) -> bool:
         """
@@ -119,27 +139,39 @@ class RTKManager:
         Returns:
             停止是否成功
         """
-        if not self._running:
-            self.logger.warning("服务未在运行")
-            return False
+        with self._state_lock:
+            if not self._running:
+                self.logger.warning("服务未在运行")
+                return False
+            station = self.station
+            thread = self.thread
+            self._running = False
         
-        # 停止基站
-        if self.station:
-            self.station.stop()
+        # 停止基站（在锁外执行，避免阻塞其他状态读取）
+        if station:
+            station.stop()
         
         # 等待线程结束
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=self.STOP_TIMEOUT)
+        stopped_cleanly = True
+        if thread and thread.is_alive():
+            thread.join(timeout=self.STOP_TIMEOUT)
             
-            if self.thread.is_alive():
+            if thread.is_alive():
                 self.logger.warning("服务线程未能在超时时间内停止")
+                stopped_cleanly = False
         
-        self._running = False
-        self.station = None
-        self.thread = None
+        with self._state_lock:
+            if stopped_cleanly:
+                self.station = None
+                self.thread = None
+            else:
+                # 线程仍在运行时保留引用，便于状态观测并阻止重复启动
+                self.station = station
+                self.thread = thread
         
-        self.logger.info("RTK 服务已停止")
-        return True
+        if stopped_cleanly:
+            self.logger.info("RTK 服务已停止")
+        return stopped_cleanly
     
     def is_running(self) -> bool:
         """
@@ -148,7 +180,8 @@ class RTKManager:
         Returns:
             True 如果服务正在运行
         """
-        return self._running
+        with self._state_lock:
+            return self._running
     
     def get_status(self) -> dict:
         """
@@ -157,13 +190,18 @@ class RTKManager:
         Returns:
             包含服务状态的字典
         """
+        with self._state_lock:
+            running = self._running
+            thread = self.thread
+            station = self.station
+        
         status = {
-            "running": self._running,
-            "thread_alive": self.thread.is_alive() if self.thread else False,
+            "running": running,
+            "thread_alive": thread.is_alive() if thread else False,
         }
         
-        if self.station:
-            status.update(self.station.get_status())
+        if station:
+            status.update(station.get_status())
         
         return status
 
