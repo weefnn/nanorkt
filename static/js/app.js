@@ -15,6 +15,8 @@ const state = {
     statusInterval: null
 };
 
+const ADMIN_TOKEN_STORAGE_KEY = 'nanorkt_admin_token';
+
 // ============================================================================
 // Initialization
 // ============================================================================
@@ -25,6 +27,8 @@ async function init() {
     // Set current year in footer
     const yearElem = document.getElementById('currentYear');
     if (yearElem) yearElem.textContent = new Date().getFullYear();
+
+    bootstrapAdminTokenFromUrl();
 
     try {
         showLoading(true);
@@ -71,7 +75,7 @@ function showLoading(show) {
 
 async function loadConfig() {
     try {
-        const response = await fetch('/api/config');
+        const response = await apiFetch('/api/config');
         if (!response.ok) throw new Error('Failed to fetch config');
 
         state.currentConfig = await response.json();
@@ -109,7 +113,7 @@ function setInputValue(id, value) {
 
 async function loadServiceStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await apiFetch('/api/status');
         if (!response.ok) throw new Error('Status fetch failed');
         const data = await response.json();
         updateServiceStatusBadge(data.running);
@@ -139,7 +143,7 @@ async function loadSerialPorts() {
     const currentPort = state.currentConfig?.serial?.port || '';
 
     try {
-        const response = await fetch('/api/serial-ports');
+        const response = await apiFetch('/api/serial-ports');
         if (!response.ok) throw new Error('Ports fetch failed');
 
         const data = await response.json();
@@ -180,7 +184,7 @@ async function loadSerialPorts() {
 
 async function updateSystemStatus() {
     try {
-        const response = await fetch('/api/system');
+        const response = await apiFetch('/api/system');
         if (!response.ok) return; // Silent fail
         const data = await response.json();
 
@@ -231,6 +235,40 @@ function updateProgressBar(id, value, max, unit) {
 function setText(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text || '--';
+}
+
+function bootstrapAdminTokenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return;
+
+    try {
+        localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+    } catch (error) {
+        console.warn('Failed to persist admin token:', error);
+    }
+}
+
+function getAdminToken() {
+    try {
+        return localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
+    } catch (error) {
+        console.warn('Failed to read admin token:', error);
+        return '';
+    }
+}
+
+async function apiFetch(url, options = {}) {
+    const token = getAdminToken();
+    const headers = new Headers(options.headers || {});
+    if (token) {
+        headers.set('X-Admin-Token', token);
+    }
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
 }
 
 // ============================================================================
@@ -368,7 +406,7 @@ function bindEvents() {
             const config = Object.fromEntries(formData.entries());
 
             try {
-                const res = await fetch('/api/config', {
+                const res = await apiFetch('/api/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -391,7 +429,7 @@ function bindClick(id, handler) {
 
 async function controlService(action) {
     try {
-        const res = await fetch('/api/control', {
+        const res = await apiFetch('/api/control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })
