@@ -193,12 +193,13 @@ class QianxunInitializer:
         command = f"QXCFGPRT,1,0,{baudrate},8,1,0"
         return self.send_command(command)
     
-    def configure_rtcm_output(self, rate: int = 1) -> bool:
+    def configure_rtcm_output(self, rate: int = 1, baudrate: int = 115200) -> bool:
         """
         配置 RTCM3 消息输出
         
         Args:
             rate: 输出频率（Hz），1 表示 1Hz
+            baudrate: 串口波特率，用于保持接收机端口配置与读取端一致
         
         Returns:
             配置是否成功
@@ -219,7 +220,7 @@ class QianxunInitializer:
         
         # 配置端口输出格式
         time.sleep(1.0)
-        port_cmd = "QXCFGPRT,0,0,,115200,h00000005,h00000004"
+        port_cmd = f"QXCFGPRT,0,0,,{baudrate},h00000005,h00000004"
         self.send_command(port_cmd)
         
         return success
@@ -316,7 +317,7 @@ class QianxunInitializer:
                 self.logger.warning("基站坐标配置不完整，跳过")
         
         # 3. 配置 RTCM 输出
-        if not self.configure_rtcm_output(rtcm_rate):
+        if not self.configure_rtcm_output(rtcm_rate, baudrate=baudrate):
             self.logger.error("RTCM 输出配置失败")
             return False
         
