@@ -1,6 +1,10 @@
 import unittest
 
-from app.web_security import drop_empty_password, mask_sensitive_config
+from app.web_security import (
+    drop_empty_password,
+    is_sensitive_api_allowed,
+    mask_sensitive_config,
+)
 
 
 class ApiSecurityHelpersTest(unittest.TestCase):
@@ -33,6 +37,42 @@ class ApiSecurityHelpersTest(unittest.TestCase):
         sanitized = drop_empty_password(update_data)
 
         self.assertEqual("new-secret", sanitized["ntrip"]["password"])
+
+    def test_sensitive_api_allows_loopback_without_token(self):
+        self.assertTrue(
+            is_sensitive_api_allowed(
+                client_host="127.0.0.1",
+                provided_token=None,
+                configured_token="expected-token",
+            )
+        )
+
+    def test_sensitive_api_rejects_remote_without_configured_token(self):
+        self.assertFalse(
+            is_sensitive_api_allowed(
+                client_host="192.168.1.50",
+                provided_token="any-token",
+                configured_token="",
+            )
+        )
+
+    def test_sensitive_api_allows_remote_with_valid_token(self):
+        self.assertTrue(
+            is_sensitive_api_allowed(
+                client_host="192.168.1.50",
+                provided_token="right-token",
+                configured_token="right-token",
+            )
+        )
+
+    def test_sensitive_api_rejects_remote_with_invalid_token(self):
+        self.assertFalse(
+            is_sensitive_api_allowed(
+                client_host="192.168.1.50",
+                provided_token="wrong-token",
+                configured_token="right-token",
+            )
+        )
 
 
 if __name__ == "__main__":

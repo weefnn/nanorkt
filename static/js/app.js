@@ -14,6 +14,7 @@ const state = {
     currentConfig: null,
     statusInterval: null
 };
+const ADMIN_TOKEN_STORAGE_KEY = 'nanorktAdminToken';
 
 // ============================================================================
 // Initialization
@@ -28,6 +29,7 @@ async function init() {
 
     try {
         showLoading(true);
+        primeAdminTokenFromUrl();
 
         await Promise.all([
             loadConfig(),
@@ -65,13 +67,44 @@ function showLoading(show) {
     if (el) el.style.display = show ? 'flex' : 'none';
 }
 
+function primeAdminTokenFromUrl() {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (!token) return;
+
+    try {
+        localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+    } catch (error) {
+        console.warn('Failed to persist admin token:', error);
+    }
+}
+
+function getAdminToken() {
+    try {
+        return localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
+    } catch (error) {
+        console.warn('Failed to read admin token:', error);
+        return '';
+    }
+}
+
+async function apiFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    const token = getAdminToken();
+
+    if (token) {
+        headers['X-Admin-Token'] = token;
+    }
+
+    return fetch(url, { ...options, headers });
+}
+
 // ============================================================================
 // Data Loading & API
 // ============================================================================
 
 async function loadConfig() {
     try {
-        const response = await fetch('/api/config');
+        const response = await apiFetch('/api/config');
         if (!response.ok) throw new Error('Failed to fetch config');
 
         state.currentConfig = await response.json();
@@ -109,7 +142,7 @@ function setInputValue(id, value) {
 
 async function loadServiceStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await apiFetch('/api/status');
         if (!response.ok) throw new Error('Status fetch failed');
         const data = await response.json();
         updateServiceStatusBadge(data.running);
@@ -139,7 +172,7 @@ async function loadSerialPorts() {
     const currentPort = state.currentConfig?.serial?.port || '';
 
     try {
-        const response = await fetch('/api/serial-ports');
+        const response = await apiFetch('/api/serial-ports');
         if (!response.ok) throw new Error('Ports fetch failed');
 
         const data = await response.json();
@@ -180,7 +213,7 @@ async function loadSerialPorts() {
 
 async function updateSystemStatus() {
     try {
-        const response = await fetch('/api/system');
+        const response = await apiFetch('/api/system');
         if (!response.ok) return; // Silent fail
         const data = await response.json();
 
@@ -374,7 +407,7 @@ function bindEvents() {
             }
 
             try {
-                const res = await fetch('/api/config', {
+                const res = await apiFetch('/api/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -397,7 +430,7 @@ function bindClick(id, handler) {
 
 async function controlService(action) {
     try {
-        const res = await fetch('/api/control', {
+        const res = await apiFetch('/api/control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })

@@ -18,7 +18,11 @@ from fastapi.responses import JSONResponse
 import serial.tools.list_ports
 
 from app.core.config import Config
-from app.web_security import mask_sensitive_config, drop_empty_password
+from app.web_security import (
+    mask_sensitive_config,
+    drop_empty_password,
+    is_sensitive_api_allowed,
+)
 from app.web.services import get_manager
 from app.web.utils import dot_to_nested, get_system_status
 
@@ -26,6 +30,21 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+
+
+def _assert_admin_access(request: Request) -> None:
+    """
+    校验敏感管理接口访问权限。
+    """
+    client_host = request.client.host if request.client else None
+    provided_token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
+
+    if not is_sensitive_api_allowed(client_host, provided_token):
+        raise HTTPException(
+            status_code=403,
+            detail="管理接口访问被拒绝：本机访问可直接使用，远程访问需提供有效管理员令牌",
+        )
+
 
 # ============================================================================
 # 串口管理 API
@@ -102,13 +121,14 @@ async def get_service_status() -> Dict[str, Any]:
 # ============================================================================
 
 @router.get("/config", summary="获取当前配置")
-async def get_config() -> Dict[str, Any]:
+async def get_config(request: Request) -> Dict[str, Any]:
     """
     获取当前配置文件内容
     
     Returns:
         完整的配置字典
     """
+    _assert_admin_access(request)
     config = Config()
     return mask_sensitive_config(config.to_dict())
 
@@ -129,6 +149,7 @@ async def update_config(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        _assert_admin_access(request)
         data = await request.json()
         
         # 将点号分隔的扁平键转换为嵌套结构
@@ -176,6 +197,7 @@ async def control_service(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        _assert_admin_access(request)
         data = await request.json()
         action = data.get("action")
         manager = get_manager()

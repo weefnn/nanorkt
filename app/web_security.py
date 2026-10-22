@@ -5,6 +5,8 @@ Web 安全相关辅助函数。
 """
 
 from copy import deepcopy
+import os
+import secrets
 from typing import Any, Dict
 
 
@@ -35,3 +37,29 @@ def drop_empty_password(update_data: Dict[str, Any]) -> Dict[str, Any]:
             sanitized.pop("ntrip", None)
 
     return sanitized
+
+
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def is_sensitive_api_allowed(
+    client_host: str | None,
+    provided_token: str | None,
+    configured_token: str | None = None,
+) -> bool:
+    """
+    管理接口访问控制：
+    - 本机回环访问放行
+    - 远程访问必须提供正确 token
+    """
+    if client_host in LOOPBACK_HOSTS:
+        return True
+
+    expected = configured_token
+    if expected is None:
+        expected = os.getenv("NANORKT_ADMIN_TOKEN", "").strip()
+
+    if not expected or not provided_token:
+        return False
+
+    return secrets.compare_digest(provided_token, expected)
