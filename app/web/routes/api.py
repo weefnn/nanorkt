@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 import serial.tools.list_ports
 
 from app.core.config import Config
+from app.web_security import mask_sensitive_config, drop_empty_password
 from app.web.services import get_manager
 from app.web.utils import dot_to_nested, get_system_status
 
@@ -25,7 +26,6 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
-
 
 # ============================================================================
 # 串口管理 API
@@ -110,7 +110,7 @@ async def get_config() -> Dict[str, Any]:
         完整的配置字典
     """
     config = Config()
-    return config.to_dict()
+    return mask_sensitive_config(config.to_dict())
 
 
 @router.post("/config", summary="更新配置")
@@ -133,6 +133,7 @@ async def update_config(request: Request) -> JSONResponse:
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
+        nested_data = drop_empty_password(nested_data)
         
         config = Config()
         success = config.save(nested_data)

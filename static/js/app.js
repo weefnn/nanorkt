@@ -366,6 +366,12 @@ function bindEvents() {
             e.preventDefault();
             const formData = new FormData(form);
             const config = Object.fromEntries(formData.entries());
+            const ntripPassword = config['ntrip.password'];
+
+            // 留空密码表示“保持当前密码不变”
+            if (typeof ntripPassword === 'string' && ntripPassword.trim() === '') {
+                delete config['ntrip.password'];
+            }
 
             try {
                 const res = await fetch('/api/config', {
