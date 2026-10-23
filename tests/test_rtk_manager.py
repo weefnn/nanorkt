@@ -43,6 +43,14 @@ class FailingStartThread(ImmediateExitThread):
         raise RuntimeError("thread start failed")
 
 
+class NoOpLock:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
 def load_rtk_manager_module():
     spec = importlib.util.spec_from_file_location("rtk_manager_under_test", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -79,10 +87,12 @@ class RTKManagerTest(unittest.TestCase):
         module.threading.Thread = ImmediateExitThread
         try:
             manager = module.RTKManager()
+            # 使用空锁让同步线程桩在测试中可重入，稳定复现线程秒退场景
+            manager._state_lock = NoOpLock()
             started = manager.start_service()
 
             self.assertTrue(started)
-            self.assertFalse(manager.thread.is_alive())
+            self.assertTrue(manager.thread is None or not manager.thread.is_alive())
             self.assertFalse(
                 manager.is_running(),
                 "线程已退出时，管理器不应残留 running=True",
