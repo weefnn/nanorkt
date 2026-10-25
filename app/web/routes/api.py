@@ -110,7 +110,12 @@ async def get_config() -> Dict[str, Any]:
         完整的配置字典
     """
     config = Config()
-    return config.to_dict()
+    config_data = config.to_dict()
+    ntrip_config = config_data.get("ntrip")
+    if isinstance(ntrip_config, dict) and "password" in ntrip_config:
+        # 避免通过 API 明文暴露敏感凭据
+        ntrip_config["password"] = ""
+    return config_data
 
 
 @router.post("/config", summary="更新配置")
@@ -135,6 +140,19 @@ async def update_config(request: Request) -> JSONResponse:
         nested_data = dot_to_nested(data)
         
         config = Config()
+        current_config = config.to_dict()
+
+        # 前端会提交完整表单；当密码为空字符串时保留现有密码，避免被意外清空
+        incoming_ntrip = nested_data.get("ntrip")
+        if isinstance(incoming_ntrip, dict):
+            incoming_password = incoming_ntrip.get("password")
+            if isinstance(incoming_password, str) and incoming_password.strip() == "":
+                current_ntrip = current_config.get("ntrip")
+                if isinstance(current_ntrip, dict):
+                    existing_password = current_ntrip.get("password")
+                    if isinstance(existing_password, str):
+                        incoming_ntrip["password"] = existing_password
+
         success = config.save(nested_data)
         
         if success:
