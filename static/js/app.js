@@ -370,6 +370,11 @@ function bindEvents() {
             const formData = new FormData(form);
             const config = Object.fromEntries(formData.entries());
 
+            // 空密码表示不更新密码，避免覆盖已有凭据
+            if ((config['ntrip.password'] || '') === '') {
+                delete config['ntrip.password'];
+            }
+
             try {
                 const res = await fetch('/api/config', {
                     method: 'POST',

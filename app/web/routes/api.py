@@ -110,7 +110,13 @@ async def get_config() -> Dict[str, Any]:
         完整的配置字典
     """
     config = Config()
-    return config.to_dict()
+    config_data = config.to_dict()
+
+    # 避免通过配置读取接口回传明文凭据
+    if isinstance(config_data.get("ntrip"), dict):
+        config_data["ntrip"]["password"] = ""
+
+    return config_data
 
 
 @router.post("/config", summary="更新配置")
@@ -133,6 +139,13 @@ async def update_config(request: Request) -> JSONResponse:
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
+
+        # 空密码表示“不修改现有密码”，避免前端空值覆盖
+        if isinstance(nested_data.get("ntrip"), dict):
+            if nested_data["ntrip"].get("password", None) in ("", None):
+                nested_data["ntrip"].pop("password", None)
+            if not nested_data["ntrip"]:
+                nested_data.pop("ntrip")
         
         config = Config()
         success = config.save(nested_data)
