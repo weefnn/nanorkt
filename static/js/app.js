@@ -277,12 +277,15 @@ function addLogEntry(log) {
     if (!container) return;
 
     const entry = document.createElement('div');
-    entry.className = `log-entry ${log.level.toLowerCase()}`;
+    const level = String(log.level || 'INFO').toUpperCase();
+    entry.className = `log-entry ${level.toLowerCase()}`;
 
     // Format timestamp
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-
-    entry.innerHTML = `<strong>[${time}] [${log.level}]</strong> ${log.message}`;
+    const prefix = document.createElement('strong');
+    prefix.textContent = `[${time}] [${level}]`;
+    entry.appendChild(prefix);
+    entry.appendChild(document.createTextNode(` ${String(log.message || '')}`));
     container.appendChild(entry);
 
     // Auto scroll if near bottom
