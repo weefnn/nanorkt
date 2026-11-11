@@ -347,13 +347,26 @@ class Config:
                     self.data["base_station"]["enable_arp_average"]
                 )
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(
+        self,
+        mask_secrets: bool = False,
+        mask_value: str = "********"
+    ) -> Dict[str, Any]:
         """
         将配置导出为字典
+        
+        Args:
+            mask_secrets: 是否掩码敏感字段（如密码）
+            mask_value: 掩码值
         
         Returns:
             完整的配置字典
         """
         if self.app_config:
-            return self.app_config.model_dump()
+            data = self.app_config.model_dump()
+            if mask_secrets:
+                ntrip = data.get("ntrip")
+                if isinstance(ntrip, dict) and ntrip.get("password"):
+                    ntrip["password"] = mask_value
+            return data
         return {}

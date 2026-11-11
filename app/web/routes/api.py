@@ -25,6 +25,7 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+MASKED_PASSWORD = "********"
 
 
 # ============================================================================
@@ -110,7 +111,8 @@ async def get_config() -> Dict[str, Any]:
         完整的配置字典
     """
     config = Config()
-    return config.to_dict()
+    # 避免通过接口返回明文凭据
+    return config.to_dict(mask_secrets=True, mask_value=MASKED_PASSWORD)
 
 
 @router.post("/config", summary="更新配置")
@@ -133,6 +135,15 @@ async def update_config(request: Request) -> JSONResponse:
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
+        
+        # 前端加载配置时会收到掩码密码，提交时需要保留原密码
+        ntrip_data = nested_data.get("ntrip")
+        if isinstance(ntrip_data, dict):
+            password = ntrip_data.get("password")
+            if password == MASKED_PASSWORD:
+                ntrip_data.pop("password", None)
+                if not ntrip_data:
+                    nested_data.pop("ntrip", None)
         
         config = Config()
         success = config.save(nested_data)
