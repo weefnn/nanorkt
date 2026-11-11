@@ -1,17 +1,17 @@
 base_station:
-  altitude: 51.123
+  altitude: 0.0
   enable_arp_average: 0
-  latitude: 31.359069353
-  longitude: 120.714640617
+  latitude: 0.0
+  longitude: 0.0
 ntrip:
-  host: caster.emlid.com
-  mountpoint: MP14282
-  password: 735sfa
+  host: your-ntrip-server.com
+  mountpoint: YOUR_MOUNTPOINT
+  password: CHANGE_ME
   port: 2101
-  username: MP14282
+  username: your_username
 reconnect:
   max_retries: 5
   retry_delay: 5.0
 serial:
   baudrate: 115200
-  port: /dev/cu.usbserial-027FFD38
+  port: /dev/ttyUSB0
