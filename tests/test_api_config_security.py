@@ -54,8 +54,9 @@ class ConfigSecurityTests(unittest.TestCase):
         temp_config = self._temp_config_class()
 
         with patch.object(api_routes, "Config", temp_config):
-            with TestClient(create_app()) as client:
-                response = client.get("/api/config")
+            with patch.object(api_routes, "ensure_api_access", return_value=None):
+                with TestClient(create_app()) as client:
+                    response = client.get("/api/config")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -73,8 +74,9 @@ class ConfigSecurityTests(unittest.TestCase):
         }
 
         with patch.object(api_routes, "Config", temp_config):
-            with TestClient(create_app()) as client:
-                response = client.post("/api/config", json=payload)
+            with patch.object(api_routes, "ensure_api_access", return_value=None):
+                with TestClient(create_app()) as client:
+                    response = client.post("/api/config", json=payload)
 
         self.assertEqual(response.status_code, 200)
         saved = CoreConfig(str(self.config_path)).to_dict()
