@@ -14,6 +14,7 @@ const state = {
     currentConfig: null,
     statusInterval: null
 };
+const ADMIN_TOKEN_KEY = 'nanorkt_admin_token';
 
 // ============================================================================
 // Initialization
@@ -71,7 +72,7 @@ function showLoading(show) {
 
 async function loadConfig() {
     try {
-        const response = await fetch('/api/config');
+        const response = await apiFetch('/api/config');
         if (!response.ok) throw new Error('Failed to fetch config');
 
         state.currentConfig = await response.json();
@@ -109,7 +110,7 @@ function setInputValue(id, value) {
 
 async function loadServiceStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await apiFetch('/api/status');
         if (!response.ok) throw new Error('Status fetch failed');
         const data = await response.json();
         updateServiceStatusBadge(data.running);
@@ -139,7 +140,7 @@ async function loadSerialPorts() {
     const currentPort = state.currentConfig?.serial?.port || '';
 
     try {
-        const response = await fetch('/api/serial-ports');
+        const response = await apiFetch('/api/serial-ports');
         if (!response.ok) throw new Error('Ports fetch failed');
 
         const data = await response.json();
@@ -180,7 +181,7 @@ async function loadSerialPorts() {
 
 async function updateSystemStatus() {
     try {
-        const response = await fetch('/api/system');
+        const response = await apiFetch('/api/system');
         if (!response.ok) return; // Silent fail
         const data = await response.json();
 
@@ -282,7 +283,10 @@ function addLogEntry(log) {
     // Format timestamp
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
 
-    entry.innerHTML = `<strong>[${time}] [${log.level}]</strong> ${log.message}`;
+    const prefix = document.createElement('strong');
+    prefix.textContent = `[${time}] [${log.level}] `;
+    entry.appendChild(prefix);
+    entry.appendChild(document.createTextNode(String(log.message ?? '')));
     container.appendChild(entry);
 
     // Auto scroll if near bottom
@@ -368,7 +372,7 @@ function bindEvents() {
             const config = Object.fromEntries(formData.entries());
 
             try {
-                const res = await fetch('/api/config', {
+                const res = await apiFetch('/api/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -391,7 +395,7 @@ function bindClick(id, handler) {
 
 async function controlService(action) {
     try {
-        const res = await fetch('/api/control', {
+        const res = await apiFetch('/api/control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })
@@ -403,4 +407,24 @@ async function controlService(action) {
         console.error(err);
         alert(`Failed to ${action} service`);
     }
+}
+
+function getAdminToken() {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromQuery = params.get('token');
+    if (tokenFromQuery) {
+        localStorage.setItem(ADMIN_TOKEN_KEY, tokenFromQuery);
+    }
+    return localStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+async function apiFetch(url, options = {}) {
+    const mergedOptions = { ...options };
+    const headers = new Headers(options.headers || {});
+    const token = getAdminToken();
+    if (token) {
+        headers.set('X-Admin-Token', token);
+    }
+    mergedOptions.headers = headers;
+    return fetch(url, mergedOptions);
 }

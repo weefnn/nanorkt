@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 import serial.tools.list_ports
 
 from app.core.config import Config
+from app.web.security import ensure_api_access
 from app.web.services import get_manager
 from app.web.utils import dot_to_nested, get_system_status
 
@@ -25,6 +26,36 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+PASSWORD_MASK = "********"
+
+
+def _mask_sensitive_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """返回脱敏后的配置副本。"""
+    masked = dict(config_data)
+    ntrip_data = masked.get("ntrip")
+    if isinstance(ntrip_data, dict) and ntrip_data.get("password"):
+        ntrip_copy = dict(ntrip_data)
+        ntrip_copy["password"] = PASSWORD_MASK
+        masked["ntrip"] = ntrip_copy
+    return masked
+
+
+def _preserve_masked_password(update_data: Dict[str, Any], config: Config) -> Dict[str, Any]:
+    """当前端提交掩码密码时保留原值，避免误覆盖。"""
+    ntrip = update_data.get("ntrip")
+    if not isinstance(ntrip, dict):
+        return update_data
+
+    if ntrip.get("password") != PASSWORD_MASK:
+        return update_data
+
+    current_password = config.get("ntrip.password", "")
+    ntrip_copy = dict(ntrip)
+    ntrip_copy["password"] = current_password
+
+    updated = dict(update_data)
+    updated["ntrip"] = ntrip_copy
+    return updated
 
 
 # ============================================================================
@@ -102,15 +133,16 @@ async def get_service_status() -> Dict[str, Any]:
 # ============================================================================
 
 @router.get("/config", summary="获取当前配置")
-async def get_config() -> Dict[str, Any]:
+async def get_config(request: Request) -> Dict[str, Any]:
     """
     获取当前配置文件内容
     
     Returns:
         完整的配置字典
     """
+    ensure_api_access(request)
     config = Config()
-    return config.to_dict()
+    return _mask_sensitive_config(config.to_dict())
 
 
 @router.post("/config", summary="更新配置")
@@ -129,12 +161,14 @@ async def update_config(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
         
         config = Config()
+        nested_data = _preserve_masked_password(nested_data, config)
         success = config.save(nested_data)
         
         if success:
@@ -175,6 +209,7 @@ async def control_service(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         action = data.get("action")
         manager = get_manager()
@@ -186,7 +221,12 @@ async def control_service(request: Request) -> JSONResponse:
                     "message": "服务已在运行中"
                 })
             
-            manager.start_service()
+            started = manager.start_service()
+            if not started:
+                return JSONResponse({
+                    "success": False,
+                    "message": "服务启动失败"
+                }, status_code=500)
             return JSONResponse({
                 "success": True,
                 "message": "服务已启动"
@@ -199,7 +239,12 @@ async def control_service(request: Request) -> JSONResponse:
                     "message": "服务未在运行"
                 })
             
-            manager.stop_service()
+            stopped = manager.stop_service()
+            if not stopped:
+                return JSONResponse({
+                    "success": False,
+                    "message": "服务停止超时"
+                }, status_code=500)
             return JSONResponse({
                 "success": True,
                 "message": "服务已停止"
