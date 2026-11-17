@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 import serial.tools.list_ports
 
 from app.core.config import Config
+from app.web.security import ensure_api_access
 from app.web.services import get_manager
 from app.web.utils import dot_to_nested, get_system_status
 
@@ -102,15 +103,24 @@ async def get_service_status() -> Dict[str, Any]:
 # ============================================================================
 
 @router.get("/config", summary="获取当前配置")
-async def get_config() -> Dict[str, Any]:
+async def get_config(request: Request) -> Dict[str, Any]:
     """
     获取当前配置文件内容
     
     Returns:
         完整的配置字典
     """
+    ensure_api_access(request)
+
     config = Config()
-    return config.to_dict()
+    config_data = config.to_dict()
+
+    # 避免将敏感密码明文暴露到远程管理接口
+    ntrip = config_data.get("ntrip")
+    if isinstance(ntrip, dict) and ntrip.get("password"):
+        ntrip["password"] = "********"
+
+    return config_data
 
 
 @router.post("/config", summary="更新配置")
@@ -129,10 +139,17 @@ async def update_config(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
+
+        # 前端提交掩码密码时，保留现有密码，避免误覆盖
+        ntrip_data = nested_data.get("ntrip")
+        if isinstance(ntrip_data, dict) and ntrip_data.get("password") == "********":
+            current_password = Config().get_ntrip_config().password
+            ntrip_data["password"] = current_password
         
         config = Config()
         success = config.save(nested_data)
@@ -175,6 +192,7 @@ async def control_service(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         action = data.get("action")
         manager = get_manager()
