@@ -82,6 +82,7 @@ class RTKManager:
         
         # 创建新的基站实例
         self.station = RTKBaseStation()
+        self._running = True
         
         # 在独立线程中运行
         self.thread = threading.Thread(
@@ -89,8 +90,14 @@ class RTKManager:
             name="RTKStationThread",
             daemon=True
         )
-        self.thread.start()
-        self._running = True
+        try:
+            self.thread.start()
+        except Exception as e:
+            self.logger.error(f"启动服务线程失败: {e}")
+            self._running = False
+            self.station = None
+            self.thread = None
+            return False
         
         self.logger.info("RTK 服务启动请求已发送")
         return True
