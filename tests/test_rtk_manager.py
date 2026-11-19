@@ -1,6 +1,8 @@
 import unittest
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+import threading
+import time
 import sys
 import types
 from unittest.mock import patch
@@ -27,14 +29,16 @@ RTKManager = rtk_manager.RTKManager
 class ImmediateThread:
     """同步执行 target，用于稳定复现启动竞态场景。"""
 
-    def __init__(self, target, name=None, daemon=None):
+    def __init__(self, target, args=(), kwargs=None, name=None, daemon=None):
         self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
         self._alive = False
 
     def start(self):
         self._alive = True
         try:
-            self._target()
+            self._target(*self._args, **self._kwargs)
         finally:
             self._alive = False
 
@@ -48,7 +52,7 @@ class ImmediateThread:
 class FailingThread:
     """模拟线程启动失败。"""
 
-    def __init__(self, target, name=None, daemon=None):
+    def __init__(self, target, args=(), kwargs=None, name=None, daemon=None):
         self._target = target
 
     def start(self):
@@ -62,6 +66,56 @@ class FailingThread:
 
 
 class RTKManagerTestCase(unittest.TestCase):
+    def test_concurrent_start_should_only_allow_one_success(self):
+        """并发 start 请求下只能有一个成功，防止双启动。"""
+        manager = RTKManager()
+        real_thread = threading.Thread
+        result_lock = threading.Lock()
+        results = []
+        start_barrier = threading.Barrier(2)
+
+        class NoopThread:
+            def __init__(self, target, args=(), kwargs=None, name=None, daemon=None):
+                self._alive = False
+
+            def start(self):
+                self._alive = True
+
+            def is_alive(self):
+                return self._alive
+
+            def join(self, timeout=None):
+                self._alive = False
+
+        class FakeStation:
+            def start(self):
+                return True
+
+            def stop(self):
+                return None
+
+        def slow_station_factory():
+            time.sleep(0.05)
+            return FakeStation()
+
+        def runner():
+            start_barrier.wait()
+            result = manager.start_service()
+            with result_lock:
+                results.append(result)
+
+        with patch.object(rtk_manager, "RTKBaseStation", side_effect=slow_station_factory):
+            with patch.object(rtk_manager.threading, "Thread", NoopThread):
+                t1 = real_thread(target=runner)
+                t2 = real_thread(target=runner)
+                t1.start()
+                t2.start()
+                t1.join()
+                t2.join()
+
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(results.count(False), 1)
+
     def test_fast_failure_should_not_leave_manager_running(self):
         """服务快速失败后，管理器状态不应卡在 running=True。"""
         manager = RTKManager()
