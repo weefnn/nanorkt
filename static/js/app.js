@@ -12,8 +12,10 @@ const state = {
     map: null,
     marker: null,
     currentConfig: null,
-    statusInterval: null
+    statusInterval: null,
+    adminToken: null
 };
+const ADMIN_TOKEN_STORAGE_KEY = 'nanorkt_admin_token';
 
 // ============================================================================
 // Initialization
@@ -22,6 +24,8 @@ const state = {
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
+    state.adminToken = initAdminToken();
+
     // Set current year in footer
     const yearElem = document.getElementById('currentYear');
     if (yearElem) yearElem.textContent = new Date().getFullYear();
@@ -71,7 +75,7 @@ function showLoading(show) {
 
 async function loadConfig() {
     try {
-        const response = await fetch('/api/config');
+        const response = await apiFetch('/api/config');
         if (!response.ok) throw new Error('Failed to fetch config');
 
         state.currentConfig = await response.json();
@@ -109,7 +113,7 @@ function setInputValue(id, value) {
 
 async function loadServiceStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await apiFetch('/api/status');
         if (!response.ok) throw new Error('Status fetch failed');
         const data = await response.json();
         updateServiceStatusBadge(data.running);
@@ -139,7 +143,7 @@ async function loadSerialPorts() {
     const currentPort = state.currentConfig?.serial?.port || '';
 
     try {
-        const response = await fetch('/api/serial-ports');
+        const response = await apiFetch('/api/serial-ports');
         if (!response.ok) throw new Error('Ports fetch failed');
 
         const data = await response.json();
@@ -180,7 +184,7 @@ async function loadSerialPorts() {
 
 async function updateSystemStatus() {
     try {
-        const response = await fetch('/api/system');
+        const response = await apiFetch('/api/system');
         if (!response.ok) return; // Silent fail
         const data = await response.json();
 
@@ -368,7 +372,7 @@ function bindEvents() {
             const config = Object.fromEntries(formData.entries());
 
             try {
-                const res = await fetch('/api/config', {
+                const res = await apiFetch('/api/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -389,9 +393,26 @@ function bindClick(id, handler) {
     if (el) el.addEventListener('click', handler);
 }
 
+function initAdminToken() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+        localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+    }
+    return localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
+}
+
+async function apiFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (state.adminToken) {
+        headers.set('X-Admin-Token', state.adminToken);
+    }
+    return fetch(url, { ...options, headers });
+}
+
 async function controlService(action) {
     try {
-        const res = await fetch('/api/control', {
+        const res = await apiFetch('/api/control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })

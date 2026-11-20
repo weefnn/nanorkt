@@ -19,12 +19,33 @@ import serial.tools.list_ports
 
 from app.core.config import Config
 from app.web.services import get_manager
+from app.web.security import ensure_api_access
 from app.web.utils import dot_to_nested, get_system_status
 
 
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+PASSWORD_MASK = "********"
+
+
+def _mask_ntrip_password(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """返回脱敏后的配置，避免密码明文泄露。"""
+    ntrip = config_data.get("ntrip")
+    if isinstance(ntrip, dict) and ntrip.get("password"):
+        ntrip["password"] = PASSWORD_MASK
+    return config_data
+
+
+def _preserve_masked_password(new_config: Dict[str, Any], current_password: str) -> None:
+    """
+    当前端提交掩码值时保留原密码，避免误覆盖。
+    """
+    ntrip = new_config.get("ntrip")
+    if not isinstance(ntrip, dict):
+        return
+    if ntrip.get("password") == PASSWORD_MASK:
+        ntrip["password"] = current_password
 
 
 # ============================================================================
@@ -102,15 +123,16 @@ async def get_service_status() -> Dict[str, Any]:
 # ============================================================================
 
 @router.get("/config", summary="获取当前配置")
-async def get_config() -> Dict[str, Any]:
+async def get_config(request: Request) -> Dict[str, Any]:
     """
     获取当前配置文件内容
     
     Returns:
         完整的配置字典
     """
+    ensure_api_access(request)
     config = Config()
-    return config.to_dict()
+    return _mask_ntrip_password(config.to_dict())
 
 
 @router.post("/config", summary="更新配置")
@@ -129,12 +151,17 @@ async def update_config(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
         
         config = Config()
+        _preserve_masked_password(
+            nested_data,
+            config.get_ntrip_config().password
+        )
         success = config.save(nested_data)
         
         if success:
@@ -175,6 +202,7 @@ async def control_service(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         action = data.get("action")
         manager = get_manager()
