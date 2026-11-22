@@ -83,18 +83,21 @@ class RTKManager:
                 return False
             
             # 创建新的基站实例
-            self.station = RTKBaseStation()
-            self._running = True
+            station = RTKBaseStation()
             
             # 在独立线程中运行
-            self.thread = threading.Thread(
+            thread = threading.Thread(
                 target=self._run_station,
+                args=(station,),
                 name="RTKStationThread",
                 daemon=True
             )
+            self.station = station
+            self.thread = thread
+            self._running = True
             
             try:
-                self.thread.start()
+                thread.start()
             except Exception as e:
                 self.logger.error(f"服务线程启动失败: {e}")
                 self._running = False
@@ -105,23 +108,23 @@ class RTKManager:
         self.logger.info("RTK 服务启动请求已发送")
         return True
     
-    def _run_station(self) -> None:
+    def _run_station(self, station: RTKBaseStation) -> None:
         """
         在线程中运行 RTK 基站
         
         这是内部方法，不应直接调用。
         """
         try:
-            if self.station:
-                self.station.start()
+            station.start()
         except Exception as e:
             self.logger.error(f"RTK 服务运行异常: {e}")
         finally:
             with self._state_lock:
-                self._running = False
-                self.station = None
-                if self.thread is threading.current_thread():
-                    self.thread = None
+                if self.station is station:
+                    self._running = False
+                    self.station = None
+                    if self.thread is threading.current_thread():
+                        self.thread = None
     
     def stop_service(self) -> bool:
         """
@@ -137,7 +140,6 @@ class RTKManager:
                 self.logger.warning("服务未在运行")
                 return False
             
-            self._running = False
             station = self.station
             thread = self.thread
         
@@ -151,9 +153,11 @@ class RTKManager:
             
             if thread.is_alive():
                 self.logger.warning("服务线程未能在超时时间内停止")
+                return False
         
         with self._state_lock:
             if self.station is station:
+                self._running = False
                 self.station = None
             if self.thread is thread:
                 self.thread = None
