@@ -154,6 +154,17 @@ reconnect:
 
 访问 `http://树莓派IP:8000` 打开 Web 控制台。
 
+> 安全提示：从 v2.0 起，`/api/*` 默认仅允许本机访问。  
+> 若需从局域网远程管理，请在启动前设置 Basic Auth 凭据：
+>
+> ```bash
+> export NANORTK_WEB_USERNAME=admin
+> export NANORTK_WEB_PASSWORD='your-strong-password'
+> python run_web.py
+> ```
+>
+> 设置后，非本机访问 `/api/*` 时会要求认证。
+
 ---
 
 ## 🖥️ Web 管理界面

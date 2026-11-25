@@ -13,17 +13,22 @@ API 路由模块
 import logging
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 import serial.tools.list_ports
 
 from app.core.config import Config
+from app.web.security import require_api_access
 from app.web.services import get_manager
 from app.web.utils import dot_to_nested, get_system_status
 
 
 # 创建路由器
-router = APIRouter(prefix="/api", tags=["api"])
+router = APIRouter(
+    prefix="/api",
+    tags=["api"],
+    dependencies=[Depends(require_api_access)],
+)
 logger = logging.getLogger(__name__)
 
 
