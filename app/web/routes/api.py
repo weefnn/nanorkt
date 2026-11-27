@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 import serial.tools.list_ports
 
 from app.core.config import Config
+from app.web.security import ensure_api_access
 from app.web.services import get_manager
 from app.web.utils import dot_to_nested, get_system_status
 
@@ -25,6 +26,30 @@ from app.web.utils import dot_to_nested, get_system_status
 # 创建路由器
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
+MASKED_PASSWORD = "********"
+
+
+def _mask_config_password(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """脱敏返回配置中的 NTRIP 密码。"""
+    ntrip = config_data.get("ntrip")
+    if isinstance(ntrip, dict) and ntrip.get("password"):
+        ntrip["password"] = MASKED_PASSWORD
+    return config_data
+
+
+def _restore_masked_password(
+    payload: Dict[str, Any],
+    current_password: str
+) -> Dict[str, Any]:
+    """将前端回传的掩码密码恢复为当前真实密码，避免误覆盖。"""
+    if payload.get("ntrip.password") == MASKED_PASSWORD:
+        payload["ntrip.password"] = current_password
+
+    ntrip_section = payload.get("ntrip")
+    if isinstance(ntrip_section, dict) and ntrip_section.get("password") == MASKED_PASSWORD:
+        ntrip_section["password"] = current_password
+
+    return payload
 
 
 # ============================================================================
@@ -102,15 +127,16 @@ async def get_service_status() -> Dict[str, Any]:
 # ============================================================================
 
 @router.get("/config", summary="获取当前配置")
-async def get_config() -> Dict[str, Any]:
+async def get_config(request: Request) -> Dict[str, Any]:
     """
     获取当前配置文件内容
     
     Returns:
         完整的配置字典
     """
+    ensure_api_access(request)
     config = Config()
-    return config.to_dict()
+    return _mask_config_password(config.to_dict())
 
 
 @router.post("/config", summary="更新配置")
@@ -129,7 +155,10 @@ async def update_config(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
+        current_password = Config().to_dict().get("ntrip", {}).get("password", "")
+        data = _restore_masked_password(data, current_password)
         
         # 将点号分隔的扁平键转换为嵌套结构
         nested_data = dot_to_nested(data)
@@ -175,6 +204,7 @@ async def control_service(request: Request) -> JSONResponse:
         操作结果
     """
     try:
+        ensure_api_access(request)
         data = await request.json()
         action = data.get("action")
         manager = get_manager()
