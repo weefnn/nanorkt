@@ -28,6 +28,7 @@ import uvicorn
 
 from app.core.logging_config import setup_logging
 from app.web.routes import api_router, pages_router
+from app.web.server_config import get_server_bind_config
 
 
 from collections import deque
@@ -223,12 +224,13 @@ def main():
     
     # 创建应用
     asgi_app = create_asgi_app()
+    host, port = get_server_bind_config()
     
     # 启动服务器
     uvicorn.run(
         asgi_app,
-        host="0.0.0.0",
-        port=8000,
+        host=host,
+        port=port,
         log_level="info"
     )
 
