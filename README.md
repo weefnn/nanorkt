@@ -157,8 +157,10 @@ reconnect:
 > 安全默认值：Web 服务默认仅监听 `127.0.0.1:8000`。  
 > 若确需局域网访问，请显式设置：
 > ```bash
-> NANORTK_WEB_HOST=0.0.0.0 NANORTK_WEB_PORT=8000 python run_web.py
+> NANORTK_WEB_HOST=0.0.0.0 NANORTK_WEB_PORT=8000 NANORKT_ADMIN_TOKEN=your-token python run_web.py
 > ```
+> 远程访问管理接口时，请在请求头中携带 `X-Admin-Token: your-token`。
+> Web 控制台可通过 `http://树莓派IP:8000/?token=your-token` 自动保存令牌到浏览器本地存储。
 
 ---
 
