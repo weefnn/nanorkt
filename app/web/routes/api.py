@@ -27,6 +27,48 @@ router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
 
 
+def _redact_sensitive_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    脱敏配置中的敏感字段，避免通过接口泄露明文凭据。
+    """
+    redacted = dict(config_data)
+    ntrip = redacted.get("ntrip")
+    if isinstance(ntrip, dict):
+        ntrip_copy = dict(ntrip)
+        ntrip_copy["password"] = ""
+        redacted["ntrip"] = ntrip_copy
+    return redacted
+
+
+def _preserve_existing_password(
+    existing_config: Dict[str, Any],
+    new_config: Dict[str, Any]
+) -> None:
+    """
+    当请求未提供新密码（或提供空密码）时，保留旧密码。
+
+    这样可以避免前端不回显密码时，用户保存其他配置导致密码被意外清空。
+    """
+    ntrip_config = new_config.get("ntrip")
+    if not isinstance(ntrip_config, dict):
+        return
+
+    new_password = ntrip_config.get("password")
+    if new_password not in (None, ""):
+        return
+
+    existing_ntrip = existing_config.get("ntrip")
+    if not isinstance(existing_ntrip, dict):
+        ntrip_config.pop("password", None)
+        return
+
+    existing_password = existing_ntrip.get("password")
+    if existing_password:
+        ntrip_config["password"] = existing_password
+    else:
+        ntrip_config.pop("password", None)
+
+
 # ============================================================================
 # 串口管理 API
 # ============================================================================
@@ -110,7 +152,7 @@ async def get_config() -> Dict[str, Any]:
         完整的配置字典
     """
     config = Config()
-    return config.to_dict()
+    return _redact_sensitive_config(config.to_dict())
 
 
 @router.post("/config", summary="更新配置")
@@ -135,6 +177,7 @@ async def update_config(request: Request) -> JSONResponse:
         nested_data = dot_to_nested(data)
         
         config = Config()
+        _preserve_existing_password(config.to_dict(), nested_data)
         success = config.save(nested_data)
         
         if success:
