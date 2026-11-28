@@ -82,7 +82,6 @@ async function loadConfig() {
         setInputValue('ntripPort', state.currentConfig.ntrip?.port || 2101);
         setInputValue('ntripMountpoint', state.currentConfig.ntrip?.mountpoint || '');
         setInputValue('ntripUsername', state.currentConfig.ntrip?.username || '');
-        setInputValue('ntripPassword', state.currentConfig.ntrip?.password || '');
         setInputValue('reconnectMaxRetries', state.currentConfig.reconnect?.max_retries || 5);
         setInputValue('reconnectRetryDelay', state.currentConfig.reconnect?.retry_delay || 5.0);
         setInputValue('baseStationLatitude', state.currentConfig.base_station?.latitude || 0);
@@ -366,6 +365,11 @@ function bindEvents() {
             e.preventDefault();
             const formData = new FormData(form);
             const config = Object.fromEntries(formData.entries());
+            const password = (config['ntrip.password'] || '').trim();
+            if (!password) {
+                // 空密码表示不修改已有凭据，避免误清空
+                delete config['ntrip.password'];
+            }
 
             try {
                 const res = await fetch('/api/config', {
